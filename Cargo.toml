@@ -1,0 +1,15 @@
+[workspace]
+members = [
+    "programs/resonance",
+]
+resolver = "2"
+
+[profile.release]
+opt-level = "s"
+lto = "fat"
+codegen-units = 1
+overflow-checks = true
+
+[profile.release.build-override]
+opt-level = 3
+codegen-units = 1
