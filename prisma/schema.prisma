@@ -1,0 +1,626 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  REQUESTER
+  WITNESS
+  STAKER
+  DEVELOPER
+  ADMIN
+  REVIEWER
+  SERVICE
+  USER
+}
+
+enum ProjectStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum EventCategory {
+  LOGISTICS
+  LOCATION
+  IDENTITY
+  ENVIRONMENTAL
+  SECURITY
+  OTHER
+}
+
+enum EventType {
+  DELIVERY
+  LOCATION_ARRIVAL
+}
+
+enum SecurityLevel {
+  STANDARD
+  ELEVATED
+  HIGH
+  CRITICAL
+}
+
+enum EventLifecycleStatus {
+  DRAFT
+  PENDING
+  ACTIVE
+  PROCESSING
+  COMPLETED
+  FAILED
+  ARCHIVED
+}
+
+enum EventState {
+  UNVERIFIED
+  REVIEW
+  VERIFIED
+  CHALLENGED
+  REJECTED
+}
+
+enum VerificationRequestStatus {
+  DRAFT
+  PENDING
+  VERIFYING
+  VERIFIED
+  FAILED
+  CHALLENGED
+  CANCELLED
+  APPROVED
+  REJECTED
+  COMPLETED
+}
+
+enum WitnessKind {
+  DEVICE
+  HUMAN
+  SERVICE
+  IOT
+  AI_AGENT
+  EXTERNAL_SYSTEM
+}
+
+enum WitnessStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING
+  REVIEW
+  OFFLINE
+}
+
+enum ObservationKind {
+  LOCATION
+  TIMESTAMP
+  DEVICE_SIGNAL
+  IMAGE
+  SIGNATURE
+  CONFIRMATION
+  AI_ANALYSIS
+  SENSOR
+  STATEMENT
+  EXTERNAL_SIGNAL
+  OTHER
+}
+
+enum ObservationStatus {
+  RECEIVED
+  PROCESSING
+  ACCEPTED
+  REJECTED
+  REVIEW
+}
+
+enum EvidenceKind {
+  IMAGE
+  LOCATION
+  DEVICE_DATA
+  SIGNATURE
+  DOCUMENT
+  VIDEO
+  AI_REPORT
+  SENSOR
+  ANALYSIS
+  OTHER
+}
+
+enum EvidenceStatus {
+  RECEIVED
+  ANALYZING
+  VERIFIED
+  REJECTED
+  EXPIRED
+}
+
+enum AIAlertType {
+  ANOMALY
+  CONFLICTING_SIGNAL
+  LOW_CONFIDENCE
+  DUPLICATE_SIGNAL
+  SPOOFING_RISK
+}
+
+enum AIAlertCategory {
+  TIMING_ANOMALY
+  LOCATION_ANOMALY
+  WITNESS_ANOMALY
+  EVIDENCE_ANOMALY
+  CONSENSUS_ANOMALY
+  OTHER
+}
+
+enum AIAlertSeverity {
+  INFO
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AIAlertStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+  DISMISSED
+}
+
+enum ChallengeReason {
+  INSUFFICIENT_EVIDENCE
+  CONFLICTING_OBSERVATION
+  SUSPECTED_FRAUD
+  LATE_SUBMISSION
+  DUPLICATE_CLAIM
+}
+
+enum ChallengeStatus {
+  PENDING
+  UNDER_REVIEW
+  ACCEPTED
+  REJECTED
+  INCONCLUSIVE
+  OPEN
+  RESOLVED
+  DISMISSED
+  EXPIRED
+}
+
+enum ChallengeResolution {
+  UPHELD
+  DISMISSED
+  WITHDRAWN
+}
+
+enum NotificationType {
+  EVENT_UPDATE
+  CHALLENGE
+  ALERT
+  SYSTEM
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+  ARCHIVED
+}
+
+enum IntegrityStatus {
+  UNVERIFIED
+  VERIFIED
+  TAMPERED
+}
+
+enum AttestationStatus {
+  QUEUED
+  BUILT
+  SIGNED
+  SUBMITTED
+  CONFIRMED
+  FINALIZED
+  SIMULATED
+  FAILED
+  SUPERSEDED
+}
+
+enum AttestationPublicationState {
+  NOT_SUBMITTED
+  SUBMITTED
+  CONFIRMED
+  FINALIZED
+  FAILED
+  SIMULATION_ONLY
+}
+
+enum AuditAction {
+  CREATED
+  UPDATED
+  CANCELLED
+  STATE_TRANSITIONED
+  ANALYZED
+  CHALLENGE_RAISED
+  CHALLENGE_UPDATED
+  SESSION_CREATED
+  SESSION_REVOKED
+  VERIFICATION_REQUEST_CREATED
+  EVENT_UPDATED
+  WITNESS_REGISTERED
+  OBSERVATION_SUBMITTED
+  EVIDENCE_ATTACHED
+  CHALLENGE_CREATED
+}
+
+model User {
+  id                    String                @id @default(cuid())
+  walletAddress         String?               @unique
+  email                 String?               @unique
+  displayName           String                @default("Anonymous operator")
+  role                  UserRole              @default(REQUESTER)
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  ownedProjects         Project[]             @relation("ProjectOwner")
+  projectMemberships    ProjectMember[]
+  verificationRequests  VerificationRequest[] @relation("VerificationRequester")
+  eventsCreated         Event[]               @relation("EventCreator")
+  witnessProfile        Witness?              @relation("WitnessUser")
+  observationsSubmitted Observation[]         @relation("ObservationSubmitter")
+  evidenceSubmitted     EvidenceMetadata[]    @relation("EvidenceSubmitter")
+  challengesRaised      Challenge[]           @relation("ChallengeRaiser")
+  auditLogs             AuditLog[]            @relation("AuditActor")
+  notifications         Notification[]
+  attestationsCreated   Attestation[]         @relation("AttestationCreator")
+  sessions              Session[]
+}
+
+model Project {
+  id                   String                @id @default(cuid())
+  name                 String
+  description          String?
+  status               ProjectStatus         @default(ACTIVE)
+  ownerId              String
+  owner                User                  @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  members              ProjectMember[]
+  events               Event[]
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  verificationRequests VerificationRequest[]
+
+  @@index([ownerId])
+  @@index([status])
+}
+
+model ProjectMember {
+  projectId String
+  userId    String
+  role      UserRole @default(USER)
+  joinedAt  DateTime @default(now())
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, userId])
+  @@index([userId])
+}
+
+model VerificationRequest {
+  id                String                    @id @default(cuid())
+  eventId           String?                   @unique
+  projectId         String?
+  requestedById     String
+  status            VerificationRequestStatus @default(PENDING)
+  eventType         EventType                 @default(DELIVERY)
+  title             String
+  description       String?
+  category          EventCategory
+  location          Json
+  requiredWitnesses Int                       @default(3)
+  deadline          DateTime?
+  securityLevel     SecurityLevel             @default(STANDARD)
+  occurredAt        DateTime?
+  reviewNotes       String?
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+  cancelledAt       DateTime?
+  event             Event?                    @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  project           Project?                  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  requestedBy       User                      @relation("VerificationRequester", fields: [requestedById], references: [id], onDelete: Restrict)
+
+  @@index([projectId, status])
+  @@index([requestedById, status])
+  @@index([status, createdAt])
+}
+
+model Event {
+  id                   String               @id @default(cuid())
+  projectId            String?
+  createdById          String?
+  eventType            EventType            @default(DELIVERY)
+  title                String
+  description          String?
+  category             EventCategory
+  location             Json
+  occurredAt           DateTime
+  reportedAt           DateTime             @default(now())
+  status               EventLifecycleStatus @default(PENDING)
+  state                EventState           @default(UNVERIFIED)
+  confidence           Float                @default(0)
+  startedAt            DateTime?
+  completedAt          DateTime?
+  programId            String?
+  eventPda             String?
+  transactionSignature String?              @unique
+  slot                 BigInt?
+  confirmationStatus   String?
+  project              Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdBy            User?                @relation("EventCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  verificationRequest  VerificationRequest?
+  observations         Observation[]
+  evidence             EvidenceMetadata[]
+  aiAlerts             AIAlert[]
+  challenges           Challenge[]
+  attestations         Attestation[]
+  notifications        Notification[]
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  @@index([projectId])
+  @@index([state, status])
+  @@index([reportedAt])
+  @@index([category])
+}
+
+model Witness {
+  id                   String             @id @default(cuid())
+  userId               String?            @unique
+  projectId            String?
+  name                 String
+  kind                 WitnessKind
+  description          String?
+  location             Json
+  status               WitnessStatus      @default(OFFLINE)
+  reputationScore      Float              @default(0)
+  accuracyScore        Float              @default(0)
+  observedEventCount   Int                @default(0)
+  stakeAmount          Float              @default(0)
+  stakeSymbol          String             @default("USDC")
+  stakeReference       String?
+  lastSeenAt           DateTime?
+  programId            String?
+  witnessPda           String?
+  transactionSignature String?            @unique
+  slot                 BigInt?
+  confirmationStatus   String?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  user                 User?              @relation("WitnessUser", fields: [userId], references: [id], onDelete: SetNull)
+  observations         Observation[]
+  evidence             EvidenceMetadata[]
+
+  @@index([projectId])
+  @@index([status, kind])
+}
+
+model Observation {
+  id                      String             @id @default(cuid())
+  eventId                 String
+  witnessId               String
+  submittedById           String?
+  kind                    ObservationKind
+  status                  ObservationStatus  @default(RECEIVED)
+  summary                 String
+  payload                 Json?
+  contentHash             String?
+  canonicalizationVersion String?
+  observationCommitment   String?
+  integrityStatus         IntegrityStatus    @default(UNVERIFIED)
+  integrityVerifiedAt     DateTime?
+  confidence              Float              @default(0)
+  observedAt              DateTime
+  receivedAt              DateTime           @default(now())
+  createdAt               DateTime           @default(now())
+  event                   Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  witness                 Witness            @relation(fields: [witnessId], references: [id], onDelete: Restrict)
+  submittedBy             User?              @relation("ObservationSubmitter", fields: [submittedById], references: [id], onDelete: SetNull)
+  evidence                EvidenceMetadata[]
+
+  @@index([eventId, observedAt])
+  @@index([witnessId, createdAt])
+}
+
+model EvidenceMetadata {
+  id                      String          @id @default(cuid())
+  eventId                 String
+  observationId           String?
+  witnessId               String?
+  submittedById           String?
+  kind                    EvidenceKind
+  label                   String
+  description             String?
+  collectedAt             DateTime
+  contentHash             String
+  canonicalizationVersion String?
+  evidenceCommitment      String?
+  integrityStatus         IntegrityStatus @default(UNVERIFIED)
+  integrityVerifiedAt     DateTime?
+  storageReference        String?
+  artifactRef             String?
+  metadata                Json?
+  status                  EvidenceStatus  @default(RECEIVED)
+  confidence              Float           @default(0)
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+  event                   Event           @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  observation             Observation?    @relation(fields: [observationId], references: [id], onDelete: SetNull)
+  witness                 Witness?        @relation(fields: [witnessId], references: [id], onDelete: SetNull)
+  submittedBy             User?           @relation("EvidenceSubmitter", fields: [submittedById], references: [id], onDelete: SetNull)
+
+  @@index([eventId, status])
+  @@index([contentHash])
+}
+
+model AIAlert {
+  id                String          @id @default(cuid())
+  eventId           String
+  type              AIAlertType
+  category          AIAlertCategory @default(OTHER)
+  severity          AIAlertSeverity
+  status            AIAlertStatus   @default(OPEN)
+  title             String
+  description       String?
+  message           String
+  modelName         String
+  modelVersion      String
+  confidence        Float           @default(0)
+  modelConfidence   Float
+  evidenceIds       Json?
+  recommendedAction String?
+  detectedAt        DateTime        @default(now())
+  resolvedAt        DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  event             Event           @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId, status])
+  @@index([severity, detectedAt])
+}
+
+model Challenge {
+  id                   String               @id @default(cuid())
+  eventId              String
+  raisedById           String
+  reason               ChallengeReason
+  description          String
+  stakeAmount          Float                @default(0)
+  stakeSymbol          String               @default("USDC")
+  stakeReference       String?
+  status               ChallengeStatus      @default(PENDING)
+  createdAt            DateTime             @default(now())
+  reviewDeadline       DateTime?
+  resolvedAt           DateTime?
+  resolution           ChallengeResolution?
+  programId            String?
+  eventPda             String?
+  challengePda         String?
+  transactionSignature String?              @unique
+  slot                 BigInt?
+  confirmationStatus   String?
+  event                Event                @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  raisedBy             User                 @relation("ChallengeRaiser", fields: [raisedById], references: [id], onDelete: Restrict)
+
+  @@index([eventId, status])
+  @@index([raisedById, createdAt])
+}
+
+model AuditLog {
+  id         String      @id @default(cuid())
+  actorId    String?
+  action     AuditAction
+  entityType String
+  entityId   String
+  requestId  String?
+  metadata   Json?
+  createdAt  DateTime    @default(now())
+  actor      User?       @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId, createdAt])
+  @@index([actorId, createdAt])
+}
+
+model Notification {
+  id        String             @id @default(cuid())
+  userId    String
+  eventId   String?
+  type      NotificationType
+  status    NotificationStatus @default(UNREAD)
+  title     String
+  body      String
+  metadata  Json?
+  createdAt DateTime           @default(now())
+  readAt    DateTime?
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event     Event?             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, createdAt])
+}
+
+model Attestation {
+  id                          String                      @id @default(cuid())
+  eventId                     String
+  createdById                 String?
+  status                      AttestationStatus           @default(QUEUED)
+  publicationState            AttestationPublicationState @default(NOT_SUBMITTED)
+  network                     String
+  programId                   String
+  commitment                  String
+  adapterReference            String?
+  transactionSignature        String?                     @unique
+  slot                        BigInt?
+  confirmationStatus          String?
+  eventPda                    String?
+  witnessPda                  String?
+  attestationPda              String?
+  challengePda                String?
+  canonicalizationVersion     String?
+  observationCommitment       String?
+  evidenceCommitment          String?
+  witnessPublicKey            String?
+  witnessId                   String?
+  protocolEventNumber         String?
+  witnessSignature            String?
+  witnessSignatureCommitment  String?
+  integrityStatus             IntegrityStatus             @default(UNVERIFIED)
+  integrityVerifiedAt         DateTime?
+  evidenceReferences          Json?
+  observationReference        String?
+  expectedSubmitter           String?
+  expectedInstructionData     String?
+  expectedInstructionAccounts Json?
+  createdAt                   DateTime                    @default(now())
+  simulatedAt                 DateTime?
+  event                       Event                       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  createdBy                   User?                       @relation("AttestationCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([eventId, status])
+}
+
+model ChainSyncCheckpoint {
+  id            String   @id @default(cuid())
+  network       String
+  programId     String
+  lastSlot      BigInt?
+  lastSignature String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([network, programId])
+  @@index([network, updatedAt])
+}
+
+model Session {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model IdempotencyKey {
+  id           String    @id @default(cuid())
+  scope        String
+  key          String
+  requestHash  String
+  status       String    @default("IN_PROGRESS")
+  responseCode Int?
+  responseBody Json?
+  createdAt    DateTime  @default(now())
+  completedAt  DateTime?
+  expiresAt    DateTime
+
+  @@unique([scope, key])
+  @@index([expiresAt])
+}
